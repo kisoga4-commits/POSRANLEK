@@ -385,9 +385,11 @@
             settings: 'id' 
         });
 
+        const LICENSE_TOKEN_KEY = 'LICENSE_TOKEN';
         let currentHWID = "";
         let isFullVersion = false;
         let currentLicenseClaims = null;
+        let appHardLocked = false;
 
         async function initApp() {
             try {
@@ -410,13 +412,24 @@
                     await vdb.settings.put(conf);
                 }
                 
-                if (!conf.licenseToken && conf.licenseKey) {
+                const localToken = localStorage.getItem(LICENSE_TOKEN_KEY) || '';
+                if (localToken && conf.licenseToken !== localToken) {
+                    conf.licenseToken = localToken;
+                    await vdb.settings.put(conf);
+                } else if (!localToken && conf.licenseToken) {
+                    localStorage.setItem(LICENSE_TOKEN_KEY, conf.licenseToken);
+                } else if (!localToken && !conf.licenseToken && conf.licenseKey) {
                     conf.licenseToken = conf.licenseKey;
                     conf.licenseKey = "";
+                    localStorage.setItem(LICENSE_TOKEN_KEY, conf.licenseToken);
                     await vdb.settings.put(conf);
                 }
 
                 const sec = await ensureProLicense(conf);
+                if (!sec.ok && sec.reason === 'machine_mismatch') {
+                    await lockApplication("TOKEN นี้ไม่ตรงกับเครื่องปัจจุบัน ระบบถูกล็อคเพื่อความปลอดภัย");
+                    return;
+                }
                 if (!sec.ok) await enforceUntrustedSession();
 
                 applySettingsToUI(conf);
@@ -490,17 +503,21 @@
         }
 
         async function ensureProLicense(conf) {
-            if (!conf.licenseToken) {
+            const localToken = localStorage.getItem(LICENSE_TOKEN_KEY) || '';
+            const effectiveToken = localToken || conf.licenseToken || '';
+            if (!effectiveToken) {
                 isFullVersion = false;
                 enforceTrialLimits();
                 return { ok: false, reason: 'missing_token' };
             }
-            let verifyResult = await SecurityBridge.verifySignedToken(conf.licenseToken, currentHWID);
+            let verifyResult = await SecurityBridge.verifySignedToken(effectiveToken, currentHWID);
             if (!verifyResult.ok) {
+                if (verifyResult.reason === 'machine_mismatch') return verifyResult;
                 try {
                     const recovered = await SecurityBridge.recoverTokenFromCloud(currentHWID);
                     if (recovered) {
                         conf.licenseToken = recovered;
+                        localStorage.setItem(LICENSE_TOKEN_KEY, recovered);
                         await vdb.settings.put(conf);
                         verifyResult = await SecurityBridge.verifySignedToken(recovered, currentHWID);
                     }
@@ -511,6 +528,8 @@
 
             if (verifyResult.ok) {
                 isFullVersion = true;
+                conf.licenseToken = effectiveToken;
+                localStorage.setItem(LICENSE_TOKEN_KEY, effectiveToken);
                 currentLicenseClaims = verifyResult.claims;
                 liftTrialLimits();
                 return { ok: true, claims: verifyResult.claims };
@@ -529,8 +548,22 @@
             await vNotify("โทเคนไม่ถูกต้องหรือไม่ตรงเครื่อง ระบบจะกลับสู่หน้าเข้าสู่ระบบ", "แจ้งเตือนความปลอดภัย", "🔒");
         }
 
-        function showLockScreen() { document.getElementById('license-lock').classList.remove('hidden'); }
-        function closeLockScreen() { document.getElementById('license-lock').classList.add('hidden'); }
+        async function lockApplication(message) {
+            appHardLocked = true;
+            const lock = document.getElementById('license-lock');
+            lock.classList.remove('hidden');
+            document.getElementById('lic-key').disabled = true;
+            await vNotify(message, "ล็อคระบบ", "⛔");
+        }
+
+        function showLockScreen() {
+            if (appHardLocked) return;
+            document.getElementById('license-lock').classList.remove('hidden');
+        }
+        function closeLockScreen() {
+            if (appHardLocked) return;
+            document.getElementById('license-lock').classList.add('hidden');
+        }
         function copyHWID() { const copyText = document.getElementById('display-hw-id'); copyText.select(); document.execCommand("copy"); showToast("คัดลอกรหัสเครื่องแล้ว ส่งให้แอดมินได้เลย"); }
 
         async function unlockSystem() {
@@ -545,6 +578,7 @@
 
             let conf = await vdb.settings.get('config');
             conf.licenseToken = inputToken;
+            localStorage.setItem(LICENSE_TOKEN_KEY, inputToken);
             await vdb.settings.put(conf);
             await vNotify("ตรวจสอบ Token สำเร็จ! เปิดใช้งาน PRO แล้ว", "สำเร็จ", "🎉");
             location.reload();

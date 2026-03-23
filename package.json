@@ -1,0 +1,15 @@
+{
+  "name": "posthaiban-electron",
+  "version": "1.0.0",
+  "description": "Secure offline-first Electron wrapper for PosThaiban PWA",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "systeminformation": "^5.25.11"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0"
+  }
+}
