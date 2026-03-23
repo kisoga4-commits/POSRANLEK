@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const si = require('systeminformation');
+const os = require('os');
+const crypto = require('crypto');
 
 const createWindow = () => {
   const win = new BrowserWindow({
@@ -22,22 +23,29 @@ const createWindow = () => {
   win.loadFile(path.join(__dirname, 'www', 'index.html'));
 };
 
-const getPrimaryHddSerial = async () => {
-  const disks = await si.diskLayout();
-  const primary = disks.find((disk) => disk?.serialNum && String(disk.serialNum).trim());
-  return (primary?.serialNum || '').trim();
+const getMachineFingerprint = () => {
+  const network = os.networkInterfaces();
+  const macs = Object.values(network)
+    .flat()
+    .filter((iface) => iface && !iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00')
+    .map((iface) => iface.mac)
+    .sort()
+    .join('|');
+
+  const raw = [
+    os.hostname(),
+    os.platform(),
+    os.arch(),
+    os.release(),
+    macs || 'NO_MAC'
+  ].join('|');
+
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16).toUpperCase();
 };
 
 ipcMain.handle('get-machine-id', async () => {
-  try {
-    const serial = await getPrimaryHddSerial();
-    if (serial) {
-      return `HDD-${serial.toUpperCase()}`;
-    }
-  } catch (error) {
-    console.error('Failed to get HDD serial:', error);
-  }
-  return '';
+  const fingerprint = getMachineFingerprint();
+  return fingerprint ? `PC-${fingerprint}` : '';
 });
 
 app.whenReady().then(() => {
