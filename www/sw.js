@@ -5,7 +5,7 @@
 
 const CACHE_NAME = 'posthaiban-v11-2-7-stable'; 
 
-const CORE_ASSETS = [
+const firebaseConfig = {
   apiKey: "AIzaSyC4jOmVcZp0HmmDqZCmHufnq2yyoPcvyVM",
   authDomain: "pakdu-a26c4.firebaseapp.com",
   databaseURL: "https://pakdu-a26c4-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -14,7 +14,11 @@ const CORE_ASSETS = [
   messagingSenderId: "414809008203",
   appId: "1:414809008203:web:757dceafa78d91900d85ce",
   measurementId: "G-2B03KJ4D68"
-  '.icon.png',
+};
+
+const CORE_ASSETS = [
+  './index.html',
+  './icon.png',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/html5-qrcode',
   'https://unpkg.com/dexie/dist/dexie.js',
