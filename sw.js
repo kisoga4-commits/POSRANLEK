@@ -3,7 +3,7 @@
  * ระบบเชื่อมโยงการอัปเดต + ทนทานต่อการโหลดไฟล์พลาด + ออฟไลน์สมบูรณ์แบบ
  */
 
-const CACHE_NAME = 'posthaiban-v11-2-4-stable'; 
+const CACHE_NAME = 'posthaiban-v11-2-5-stable'; 
 
 const CORE_ASSETS = [
   './',
