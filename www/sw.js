@@ -8,6 +8,7 @@ const CACHE_NAME = 'posthaiban-v11-2-7-stable';
 const CORE_ASSETS = [
   './',
   './index.html',
+  './security.js',
   './manifest.json',
   './icon.png',
   'https://cdn.tailwindcss.com',
