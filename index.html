@@ -2,33 +2,14 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  // 🟢 V11.2.4: อัปเกรด Service Worker ให้บังคับลบของเก่าแล้วรีเฟรชหน้าใหม่ทันที
+  // 🟢 V11.2.4: ลงทะเบียน Service Worker (ตรวจเวอร์ชันใหม่แบบกดเองเท่านั้น)
   let swRegistration = null;
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js').then(reg => {
         swRegistration = reg;
         console.log('SW Registered V11.2.4!', reg);
-        
-        reg.onupdatefound = () => {
-          const installingWorker = reg.installing;
-          installingWorker.onstatechange = () => {
-            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // 🟢 ใช้ vConfirm ของเราเองแทนการใช้ confirm ของระบบ
-              vConfirm('พบระบบ PosThaiban V11.2.4 ใหม่! (บังคับรีเฟรชเพื่อเคลียร์แคช) ข้อมูลสินค้าไม่หาย', 'อัปเดตระบบ', '🔄').then(res => {
-                  if(res) {
-                    installingWorker.postMessage({ type: 'SKIP_WAITING' });
-                    window.location.reload(true); 
-                  }
-              });
-            }
-          };
-        };
       }).catch(err => console.error('SW Error:', err));
-    });
-    
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload();
     });
   }
 
@@ -440,9 +421,9 @@
 
                 applySettingsToUI(conf);
                 renderEmployeeList(conf);
+                restoreAuthSession(conf);
                 updateAuthUI();
                 showPage('pos');
-                await openLoginModal(); 
             } catch (e) {
                 console.error("Init Error:", e);
                 vNotify("เกิดข้อผิดพลาดในการโหลดฐานข้อมูล", "ผิดพลาด", "❌");
@@ -452,8 +433,31 @@
         async function forceSyncUpdate() {
             if (swRegistration) {
                 swRegistration.update().then(async () => {
-                    await vNotify("ตรวจสอบระบบแล้ว! (หากมีเวอร์ชันใหม่เบราว์เซอร์จะแจ้งเตือนให้โหลดใหม่)", "ตรวจสอบสำเร็จ", "✅");
-                }).catch(async err => await vNotify("การตรวจสอบล้มเหลว กรุณาเช็คอินเทอร์เน็ต", "ผิดพลาด", "⚠️"));
+                    const askReload = async (worker) => {
+                        const ok = await vConfirm('พบเวอร์ชันใหม่ ต้องการอัปเดตตอนนี้หรือไม่?', 'อัปเดตระบบ', '🔄');
+                        if (ok) {
+                            worker.postMessage({ type: 'SKIP_WAITING' });
+                            window.location.reload();
+                        }
+                    };
+
+                    if (swRegistration.waiting) {
+                        await askReload(swRegistration.waiting);
+                        return;
+                    }
+
+                    if (swRegistration.installing) {
+                        const installingWorker = swRegistration.installing;
+                        installingWorker.onstatechange = async () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                await askReload(installingWorker);
+                            }
+                        };
+                        return;
+                    }
+
+                    await vNotify("ตรวจสอบแล้ว: ระบบเป็นเวอร์ชันล่าสุด", "ตรวจสอบสำเร็จ", "✅");
+                }).catch(async () => await vNotify("การตรวจสอบล้มเหลว กรุณาเช็คอินเทอร์เน็ต", "ผิดพลาด", "⚠️"));
             } else {
                 await vNotify("ระบบยังไม่พร้อมอัปเดต กรุณารีเฟรชหน้าจอ 1 ครั้ง (ตอนมีเน็ต)", "แจ้งเตือน", "⚠️");
             }
@@ -520,6 +524,7 @@
 
         async function enforceUntrustedSession() {
             currentUser = { role: '', id: '', name: '', shift: '' };
+            saveAuthSession();
             updateAuthUI();
             await vNotify("โทเคนไม่ถูกต้องหรือไม่ตรงเครื่อง ระบบจะกลับสู่หน้าเข้าสู่ระบบ", "แจ้งเตือนความปลอดภัย", "🔒");
         }
@@ -548,6 +553,7 @@
         let cart = []; 
         let isAdmin = false;
         let currentUser = { role: '', id: '', name: '', shift: '' };
+        const AUTH_SESSION_KEY = 'pos_auth_session_v1';
         let loginRole = 'admin';
         let currentRange = 'today'; let compressedImageBase64 = "";
         let audioCtx; let html5QrScanner = null;
@@ -561,6 +567,42 @@
             if (isFullVersion) document.getElementById('set-qr-mode').value = conf.qrMode || 'online';
             if(conf.staticQrImg) { document.getElementById('set-static-qr-preview').src = conf.staticQrImg; document.getElementById('set-static-qr-preview').classList.remove('hidden'); document.getElementById('set-static-qr-label').classList.add('hidden'); }
             if(conf.logo) { document.getElementById('shop-logo-img').src = conf.logo; document.getElementById('shop-logo-img').classList.remove('hidden'); document.getElementById('shop-emoji').classList.add('hidden'); document.getElementById('set-logo-preview').src = conf.logo; document.getElementById('set-logo-preview').classList.remove('hidden'); document.getElementById('set-logo-label').classList.add('hidden'); }
+        }
+
+        function saveAuthSession() {
+            if (currentUser.role) {
+                localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(currentUser));
+            } else {
+                localStorage.removeItem(AUTH_SESSION_KEY);
+            }
+        }
+
+        function restoreAuthSession(conf) {
+            try {
+                const raw = localStorage.getItem(AUTH_SESSION_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (saved?.role === 'admin') {
+                    currentUser = { role: 'admin', id: 'ADMIN', name: 'Admin', shift: '-' };
+                    return;
+                }
+                if (saved?.role === 'employee') {
+                    const emp = (conf?.employees || []).find(x => x.id === saved.id);
+                    if (emp) {
+                        currentUser = { role: 'employee', id: emp.id, name: emp.name, shift: emp.shift };
+                        return;
+                    }
+                }
+                localStorage.removeItem(AUTH_SESSION_KEY);
+            } catch (e) {
+                localStorage.removeItem(AUTH_SESSION_KEY);
+            }
+        }
+
+        function canAccessPage(page) {
+            if (currentUser.role === 'admin') return true;
+            if (currentUser.role === 'employee') return ['pos', 'inventory'].includes(page);
+            return page === 'pos';
         }
 
         async function saveSettings() {
@@ -583,8 +625,8 @@
         }
 
         async function showPage(n) {
-            if (currentUser.role === 'employee' && n !== 'pos') {
-                return vNotify("พนักงานเข้าได้เฉพาะโหมดขาย", "แจ้งเตือน", "🔒");
+            if (!canAccessPage(n)) {
+                return vNotify("สิทธิ์ไม่พอสำหรับหน้านี้", "แจ้งเตือน", "🔒");
             }
             document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
@@ -609,7 +651,7 @@
                 isAdmin = false;
                 adminBtn.innerText = `👤 ${currentUser.name || 'พนักงาน'}`;
                 document.getElementById('btn-clear-sales').classList.add('hidden');
-                ['tab-inventory', 'tab-report', 'tab-settings'].forEach(id => {
+                ['tab-report', 'tab-settings'].forEach(id => {
                     const tab = document.getElementById(id);
                     if (tab) tab.classList.add('trial-locked');
                 });
@@ -617,6 +659,10 @@
                 isAdmin = false;
                 adminBtn.innerText = '🔒 Login';
                 document.getElementById('btn-clear-sales').classList.add('hidden');
+                ['tab-inventory', 'tab-report', 'tab-settings'].forEach(id => {
+                    const tab = document.getElementById(id);
+                    if (tab) tab.classList.add('trial-locked');
+                });
             }
 
             const employeeBtn = document.getElementById('btn-open-employee-modal');
@@ -667,6 +713,7 @@
 
             document.getElementById('login-modal').classList.add('hidden');
             updateAuthUI();
+            saveAuthSession();
             if (currentUser.role === 'employee') await showPage('pos');
         }
 
@@ -675,8 +722,14 @@
             else await openLoginModal();
         }
 
-        async function logoutAdmin() { currentUser = { role: '', id: '', name: '', shift: '' }; updateAuthUI(); await vNotify("ออกจากระบบเรียบร้อย"); await openLoginModal(); }
-        function checkAdminAccess(p) { if(isAdmin) showPage(p); else vNotify("เฉพาะ Admin เท่านั้น", "แจ้งเตือน", "🔒"); }
+        async function logoutAdmin() { currentUser = { role: '', id: '', name: '', shift: '' }; saveAuthSession(); updateAuthUI(); await showPage('pos'); await vNotify("ออกจากระบบเรียบร้อย"); }
+        function checkAdminAccess(p) { if (canAccessPage(p)) showPage(p); else vNotify("สิทธิ์ไม่พอสำหรับหน้านี้", "แจ้งเตือน", "🔒"); }
+
+        function getPaymentBadge(method) {
+            if (method === 'cash') return '💵 เงินสด';
+            if (method === 'qr') return '📱 QR';
+            return '💳 ชำระเงิน';
+        }
 
         function openEmployeeModal() {
             if(!isAdmin) return vNotify("เฉพาะ Admin เท่านั้น", "แจ้งเตือน", "❌");
@@ -902,7 +955,7 @@
                 if (!shiftStats[shiftKey]) shiftStats[shiftKey] = { total: 0, bills: 0 };
                 shiftStats[shiftKey].total += s.total;
                 shiftStats[shiftKey].bills += 1;
-                logView.innerHTML += `<div class="bg-white p-4 rounded-2xl flex justify-between items-center border shadow-sm mb-2"><div class="text-[9px] font-bold"><p class="opacity-30 uppercase">${new Date(s.timestamp).toLocaleTimeString()}</p><p class="text-slate-600">${s.items.join(', ')}</p><span class="text-indigo-500">${s.method}</span><p class="text-[9px] text-emerald-600 mt-1">👤 ${s.employeeName || 'ไม่ระบุ'} | กะ ${s.shift || '-'}</p></div><p class="text-lg font-black text-emerald-600 italic">฿${s.total.toLocaleString()}</p></div>`;
+                logView.innerHTML += `<div class="bg-white p-4 rounded-2xl flex justify-between items-center border shadow-sm mb-2"><div class="text-[9px] font-bold"><p class="opacity-30 uppercase">${new Date(s.timestamp).toLocaleTimeString()}</p><p class="text-slate-600">${s.items.join(', ')}</p><span class="text-indigo-500">${getPaymentBadge(s.method)}</span><p class="text-[9px] text-emerald-600 mt-1">👤 ${s.employeeName || 'ไม่ระบุ'} | กะ ${s.shift || '-'}</p></div><p class="text-lg font-black text-emerald-600 italic">฿${s.total.toLocaleString()}</p></div>`;
             });
             Object.entries(hitStats).sort((a,b)=>b[1]-a[1]).forEach(([name, qty]) => { hitView.innerHTML += `<div class="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm mb-2"><p class="font-bold text-xs">${name}</p><p class="font-black text-indigo-600 text-lg">${qty} <span class="text-[8px] opacity-40 uppercase">ชิ้น</span></p></div>`; });
             Object.entries(shiftStats).sort((a,b)=>b[1].total-a[1].total).forEach(([key, stat]) => {
