@@ -64,6 +64,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="./security.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;800;900&display=swap" rel="stylesheet">
     
@@ -123,10 +124,10 @@
 
     <div id="employee-modal" class="fixed inset-0 bg-slate-900/90 z-[10001] hidden flex items-center justify-center p-6 backdrop-blur-sm">
         <div class="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl border border-slate-200">
-            <h3 class="text-lg font-black text-slate-900">👤 สร้าง ID พนักงาน</h3>
+            <h3 class="text-lg font-black text-slate-900">👤 สร้าง ID พนักงาน (PRO)</h3>
             <p class="text-[10px] text-slate-500 font-bold mt-1">กำหนดชื่อ, รหัสผ่าน และกะการทำงาน</p>
             <div class="mt-4 space-y-3">
-                <input id="emp-id" placeholder="ID พนักงาน (เช่น EMP01)" class="w-full p-3 bg-slate-50 border rounded-xl text-xs font-bold uppercase outline-none">
+                <input id="emp-id" placeholder="ID พนักงาน (เช่น 001)" class="w-full p-3 bg-slate-50 border rounded-xl text-xs font-bold uppercase outline-none">
                 <input id="emp-name" placeholder="ชื่อพนักงาน" class="w-full p-3 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
                 <input id="emp-pin" type="password" placeholder="รหัสพนักงาน" class="w-full p-3 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
                 <input id="emp-shift" placeholder="ชื่อกะ (เช่น เช้า, เย็น)" class="w-full p-3 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
@@ -165,7 +166,7 @@
             </div>
 
             <div class="space-y-4">
-                <input type="text" id="lic-key" placeholder="กรอกรหัส LICENSE KEY ที่นี่" class="w-full p-4 rounded-xl bg-slate-950 border border-indigo-500/50 text-indigo-400 text-center font-black outline-none uppercase tracking-widest focus:border-indigo-400 transition-all">
+                <input type="text" id="lic-key" placeholder="วาง SIGNED TOKEN ที่นี่" class="w-full p-4 rounded-xl bg-slate-950 border border-indigo-500/50 text-indigo-400 text-center font-black outline-none tracking-widest focus:border-indigo-400 transition-all">
                 <button onclick="unlockSystem()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-black text-sm shadow-xl active:scale-95 transition-all text-white">ยืนยันการปลดล็อค 🔓</button>
             </div>
             
@@ -308,7 +309,7 @@
                     <input id="set-bank" placeholder="ชื่อธนาคาร" class="p-4 bg-slate-50 border rounded-2xl text-xs font-bold outline-none">
                 </div>
                 <input type="password" id="set-pass" placeholder="เปลี่ยนรหัส Admin ใหม่" class="w-full p-4 bg-slate-50 border rounded-2xl text-xs font-bold text-center outline-none">
-                <button onclick="openEmployeeModal()" class="w-full bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-xs border border-emerald-100 active:scale-95">➕ สร้าง ID พนักงาน</button>
+                <button onclick="openEmployeeModal()" id="btn-open-employee-modal" class="w-full bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-xs border border-emerald-100 active:scale-95">➕ สร้าง ID พนักงาน</button>
                 <div id="employee-list" class="space-y-2"></div>
                 <button onclick="saveSettings()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-base shadow-lg active:scale-95 transition-transform">บันทึกตั้งค่า ✅</button>
             </div>
@@ -403,34 +404,9 @@
             settings: 'id' 
         });
 
-        async function getCanvasID() {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            ctx.textBaseline = "top"; ctx.font = "14px 'Arial'"; ctx.fillStyle = "#f60";
-            ctx.fillRect(125,1,62,20); ctx.fillStyle = "#069"; ctx.fillText("POS-System-2026-By-You", 2, 15);
-            ctx.fillStyle = "rgba(102, 204, 0, 0.7)"; ctx.fillText("POS-System-2026-By-You", 4, 17);
-            const result = canvas.toDataURL();
-            
-            const msgBuffer = new TextEncoder().encode(result);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return "HW-" + hashHex.slice(-8).toUpperCase(); 
-        }
-
         let currentHWID = "";
         let isFullVersion = false;
-        
-        const _0xptr_a = "VLGPRO_"; const _0xptr_b = "SECRET_"; const _0xptr_c = "2026";
-        const _getSysK = () => _0xptr_a + _0xptr_b + _0xptr_c;
-
-        async function generateUnlockKey(hwid) {
-            const msgBuffer = new TextEncoder().encode(hwid + _getSysK());
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return hashHex.slice(0, 8).toUpperCase(); 
-        }
+        let currentLicenseClaims = null;
 
         async function initApp() {
             try {
@@ -440,27 +416,27 @@
                 
                 updateNetStatusUI();
 
-                currentHWID = await getCanvasID();
+                currentHWID = await SecurityBridge.getMachineId();
                 document.getElementById('display-hw-id').value = currentHWID;
                 document.getElementById('display-settings-hw').innerText = currentHWID;
 
                 let conf = await vdb.settings.get('config');
                 if (!conf) {
-                    conf = { id: 'config', shopName: "ร้านค้าชุมชน", promptpay: "", bankName: "", password: "admin", logo: "", qrMode: "offline", staticQrImg: "", licenseKey: "", employees: [] };
+                    conf = { id: 'config', shopName: "ร้านค้าชุมชน", promptpay: "", bankName: "", password: "admin", logo: "", qrMode: "offline", staticQrImg: "", licenseToken: "", employees: [] };
                     await vdb.settings.put(conf);
                 } else if (!Array.isArray(conf.employees)) {
                     conf.employees = [];
                     await vdb.settings.put(conf);
                 }
-
-                const expectedKey = await generateUnlockKey(currentHWID);
-                if (conf.licenseKey === expectedKey) {
-                    isFullVersion = true;
-                    document.getElementById('btn-show-lock').classList.add('hidden');
-                } else {
-                    isFullVersion = false;
-                    enforceTrialLimits();
+                
+                if (!conf.licenseToken && conf.licenseKey) {
+                    conf.licenseToken = conf.licenseKey;
+                    conf.licenseKey = "";
+                    await vdb.settings.put(conf);
                 }
+
+                const sec = await ensureProLicense(conf);
+                if (!sec.ok) await enforceUntrustedSession();
 
                 applySettingsToUI(conf);
                 renderEmployeeList(conf);
@@ -497,25 +473,76 @@
             currentRange = 'today';
         }
 
+        function liftTrialLimits() {
+            document.getElementById('btn-show-lock').classList.add('hidden');
+            document.getElementById('btn-import-data').classList.remove('trial-locked');
+            document.getElementById('input-import-data').disabled = false;
+            document.getElementById('set-pp').readOnly = false;
+            document.getElementById('set-pp').classList.remove('bg-slate-200');
+            document.getElementById('set-qr-mode').disabled = false;
+            document.getElementById('btn-range-week').classList.remove('trial-locked');
+            document.getElementById('btn-range-month').classList.remove('trial-locked');
+            document.getElementById('report-date-select').disabled = false;
+        }
+
+        async function ensureProLicense(conf) {
+            if (!conf.licenseToken) {
+                isFullVersion = false;
+                enforceTrialLimits();
+                return { ok: false, reason: 'missing_token' };
+            }
+            let verifyResult = await SecurityBridge.verifySignedToken(conf.licenseToken, currentHWID);
+            if (!verifyResult.ok) {
+                try {
+                    const recovered = await SecurityBridge.recoverTokenFromCloud(currentHWID);
+                    if (recovered) {
+                        conf.licenseToken = recovered;
+                        await vdb.settings.put(conf);
+                        verifyResult = await SecurityBridge.verifySignedToken(recovered, currentHWID);
+                    }
+                } catch (e) {
+                    console.warn("Token recovery failed:", e);
+                }
+            }
+
+            if (verifyResult.ok) {
+                isFullVersion = true;
+                currentLicenseClaims = verifyResult.claims;
+                liftTrialLimits();
+                return { ok: true, claims: verifyResult.claims };
+            }
+
+            isFullVersion = false;
+            currentLicenseClaims = null;
+            enforceTrialLimits();
+            return verifyResult;
+        }
+
+        async function enforceUntrustedSession() {
+            currentUser = { role: '', id: '', name: '', shift: '' };
+            updateAuthUI();
+            await vNotify("โทเคนไม่ถูกต้องหรือไม่ตรงเครื่อง ระบบจะกลับสู่หน้าเข้าสู่ระบบ", "แจ้งเตือนความปลอดภัย", "🔒");
+        }
+
         function showLockScreen() { document.getElementById('license-lock').classList.remove('hidden'); }
         function closeLockScreen() { document.getElementById('license-lock').classList.add('hidden'); }
         function copyHWID() { const copyText = document.getElementById('display-hw-id'); copyText.select(); document.execCommand("copy"); showToast("คัดลอกรหัสเครื่องแล้ว ส่งให้แอดมินได้เลย"); }
 
         async function unlockSystem() {
-            const inputKey = document.getElementById('lic-key').value.trim().toUpperCase();
-            if(!inputKey) return vNotify("กรุณากรอก LICENSE KEY", "แจ้งเตือน", "⚠️");
-            
-            const expectedKey = await generateUnlockKey(currentHWID);
-            if(inputKey === expectedKey) {
-                let conf = await vdb.settings.get('config');
-                conf.licenseKey = expectedKey;
-                await vdb.settings.put(conf);
-                await vNotify("ปลดล็อค V11 PRO สำเร็จ! ขอบคุณที่สนับสนุน", "สำเร็จ", "🎉");
-                location.reload(); 
-            } else {
-                playSound('warn'); 
-                vNotify("LICENSE KEY ไม่ถูกต้อง!", "ผิดพลาด", "❌");
+            const inputToken = document.getElementById('lic-key').value.trim();
+            if(!inputToken) return vNotify("กรุณาวาง Signed Token", "แจ้งเตือน", "⚠️");
+
+            const verify = await SecurityBridge.verifySignedToken(inputToken, currentHWID);
+            if (!verify.ok) {
+                playSound('warn');
+                return vNotify("TOKEN ไม่ถูกต้อง / ไม่ตรง Machine ID", "ผิดพลาด", "❌");
             }
+
+            let conf = await vdb.settings.get('config');
+            conf.licenseToken = inputToken;
+            await vdb.settings.put(conf);
+            await vNotify("ตรวจสอบ Token สำเร็จ! เปิดใช้งาน PRO แล้ว", "สำเร็จ", "🎉");
+            location.reload();
         }
 
         let cart = []; 
@@ -556,6 +583,9 @@
         }
 
         async function showPage(n) {
+            if (currentUser.role === 'employee' && n !== 'pos') {
+                return vNotify("พนักงานเข้าได้เฉพาะโหมดขาย", "แจ้งเตือน", "🔒");
+            }
             document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
             document.getElementById('page-'+n).classList.remove('hidden');
@@ -566,6 +596,11 @@
 
         function updateAuthUI() {
             const adminBtn = document.getElementById('admin-btn');
+            ['tab-inventory', 'tab-report', 'tab-settings'].forEach(id => {
+                const tab = document.getElementById(id);
+                if (tab) tab.classList.remove('trial-locked');
+            });
+
             if (currentUser.role === 'admin') {
                 isAdmin = true;
                 adminBtn.innerText = '🔓 ADMIN';
@@ -574,14 +609,25 @@
                 isAdmin = false;
                 adminBtn.innerText = `👤 ${currentUser.name || 'พนักงาน'}`;
                 document.getElementById('btn-clear-sales').classList.add('hidden');
+                ['tab-inventory', 'tab-report', 'tab-settings'].forEach(id => {
+                    const tab = document.getElementById(id);
+                    if (tab) tab.classList.add('trial-locked');
+                });
             } else {
                 isAdmin = false;
                 adminBtn.innerText = '🔒 Login';
                 document.getElementById('btn-clear-sales').classList.add('hidden');
             }
+
+            const employeeBtn = document.getElementById('btn-open-employee-modal');
+            if (employeeBtn) employeeBtn.classList.toggle('hidden', !isFullVersion);
         }
 
         function setLoginRole(role) {
+            if (role === 'employee' && !isFullVersion) {
+                vNotify("ระบบพนักงานสำหรับ PRO เท่านั้น", "แจ้งเตือน", "🔒");
+                role = 'admin';
+            }
             loginRole = role;
             document.getElementById('btn-role-admin').className = `py-2 rounded-lg text-xs font-black ${role==='admin' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`;
             document.getElementById('btn-role-employee').className = `py-2 rounded-lg text-xs font-black ${role==='employee' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`;
@@ -591,11 +637,14 @@
         async function openLoginModal() {
             const conf = await vdb.settings.get('config');
             const select = document.getElementById('login-employee-select');
+            const employeeRoleBtn = document.getElementById('btn-role-employee');
             const employees = conf?.employees || [];
             select.innerHTML = employees.length
                 ? employees.map(emp => `<option value="${emp.id}">${emp.id} - ${emp.name} (${emp.shift})</option>`).join('')
                 : '<option value="">ยังไม่มีพนักงาน</option>';
             document.getElementById('login-password').value = '';
+            employeeRoleBtn.disabled = !isFullVersion;
+            employeeRoleBtn.classList.toggle('opacity-40', !isFullVersion);
             setLoginRole('admin');
             document.getElementById('login-modal').classList.remove('hidden');
         }
@@ -609,6 +658,7 @@
                 if (password !== conf.password) return vNotify("รหัส Admin ไม่ถูกต้อง", "ผิดพลาด", "❌");
                 currentUser = { role: 'admin', id: 'ADMIN', name: 'Admin', shift: '-' };
             } else {
+                if (!isFullVersion) return vNotify("ระบบพนักงานสำหรับ PRO เท่านั้น", "แจ้งเตือน", "🔒");
                 const empId = document.getElementById('login-employee-select').value;
                 const emp = (conf.employees || []).find(x => x.id === empId);
                 if (!emp || password !== emp.pin) return vNotify("รหัสพนักงานไม่ถูกต้อง", "ผิดพลาด", "❌");
@@ -617,6 +667,7 @@
 
             document.getElementById('login-modal').classList.add('hidden');
             updateAuthUI();
+            if (currentUser.role === 'employee') await showPage('pos');
         }
 
         async function toggleAdmin() {
@@ -629,7 +680,9 @@
 
         function openEmployeeModal() {
             if(!isAdmin) return vNotify("เฉพาะ Admin เท่านั้น", "แจ้งเตือน", "❌");
-            ['emp-id', 'emp-name', 'emp-pin', 'emp-shift'].forEach(id => document.getElementById(id).value = '');
+            if(!isFullVersion) return vNotify("ระบบพนักงานสำหรับ PRO เท่านั้น", "แจ้งเตือน", "🔒");
+            ['emp-name', 'emp-pin', 'emp-shift'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('emp-id').value = '';
             document.getElementById('employee-modal').classList.remove('hidden');
         }
 
@@ -639,13 +692,20 @@
 
         async function createEmployee() {
             if(!isAdmin) return;
-            const id = document.getElementById('emp-id').value.trim().toUpperCase();
+            if(!isFullVersion) return vNotify("ระบบพนักงานสำหรับ PRO เท่านั้น", "แจ้งเตือน", "🔒");
+            let id = document.getElementById('emp-id').value.trim().toUpperCase();
             const name = document.getElementById('emp-name').value.trim();
             const pin = document.getElementById('emp-pin').value.trim();
             const shift = document.getElementById('emp-shift').value.trim() || 'ทั่วไป';
-            if(!id || !name || !pin) return vNotify("กรอกข้อมูลพนักงานให้ครบ", "แจ้งเตือน", "⚠️");
+            if(!name || !pin) return vNotify("กรอกข้อมูลพนักงานให้ครบ", "แจ้งเตือน", "⚠️");
             const conf = await vdb.settings.get('config');
             conf.employees = conf.employees || [];
+            if(!id) {
+                const used = new Set(conf.employees.map(emp => emp.id));
+                let running = 1;
+                while (used.has(String(running).padStart(3, '0'))) running += 1;
+                id = String(running).padStart(3, '0');
+            }
             if(conf.employees.some(emp => emp.id === id)) return vNotify("ID นี้ถูกใช้แล้ว", "ผิดพลาด", "❌");
             conf.employees.push({ id, name, pin, shift });
             await vdb.settings.put(conf);
@@ -657,11 +717,26 @@
         function renderEmployeeList(conf) {
             const employees = conf?.employees || [];
             const wrap = document.getElementById('employee-list');
+            if (!isFullVersion) {
+                wrap.innerHTML = '<p class="text-[10px] text-slate-400 font-bold text-center">ระบบพนักงานสำหรับ PRO เท่านั้น</p>';
+                return;
+            }
             if (!employees.length) {
                 wrap.innerHTML = '<p class="text-[10px] text-slate-400 font-bold text-center">ยังไม่มี ID พนักงาน</p>';
                 return;
             }
-            wrap.innerHTML = employees.map(emp => `<div class="bg-slate-50 border rounded-xl p-2 text-[10px] font-bold flex justify-between"><span>${emp.id} - ${emp.name}</span><span class="text-indigo-500">กะ: ${emp.shift}</span></div>`).join('');
+            wrap.innerHTML = employees.map(emp => `<div class="bg-slate-50 border rounded-xl p-2 text-[10px] font-bold flex justify-between items-center gap-2"><span>${emp.id} - ${emp.name} <span class="text-indigo-500">กะ: ${emp.shift}</span></span><button onclick="deleteEmployee('${emp.id}')" class="text-rose-500 bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg text-[9px]">ลบ</button></div>`).join('');
+        }
+
+        async function deleteEmployee(empId) {
+            if(!isAdmin) return vNotify("เฉพาะ Admin เท่านั้น", "แจ้งเตือน", "❌");
+            if(!isFullVersion) return vNotify("ระบบพนักงานสำหรับ PRO เท่านั้น", "แจ้งเตือน", "🔒");
+            if(!(await vConfirm(`ลบพนักงาน ${empId} ?`, 'ยืนยันการลบพนักงาน', '🗑️'))) return;
+            const conf = await vdb.settings.get('config');
+            conf.employees = (conf.employees || []).filter(emp => emp.id !== empId);
+            await vdb.settings.put(conf);
+            renderEmployeeList(conf);
+            await vNotify("ลบพนักงานแล้ว", "สำเร็จ", "✅");
         }
 
         async function renderInventory() {
@@ -882,6 +957,7 @@
                     if(data.settings && data.inventory) { 
                         if(data.metadata && data.metadata.hwid !== currentHWID) {
                             if(!(await vConfirm("⚠️ นำเข้าจากเครื่องอื่น (HWID ไม่ตรงกัน) ระบบจะให้ปลดล็อคอีกครั้ง ยืนยันนำเข้าไหม?", "คำเตือนระบบ", "⚠️"))) return;
+                            data.settings.licenseToken = ""; 
                             data.settings.licenseKey = ""; 
                         }
                         await vdb.transaction('rw', vdb.settings, vdb.inventory, vdb.sales, async () => {
